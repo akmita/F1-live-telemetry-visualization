@@ -1,65 +1,154 @@
+import threading
 from datetime import datetime, timedelta
+import time
+from queue import Queue
+from xmlrpc.client import DateTime
+from threading import Thread
+
 import pygame
 import saveFiles
+import queue
 
+
+class PosMapper:
+
+    def __init__(self, pos_data):
+        self.minx = min(pos_data.X)
+        self.maxx = max(pos_data.X)
+        self.miny = min(pos_data.Y)
+        self.maxy = max(pos_data.Y)
+
+        self.UIRange = 500
+
+        self.dataRangeX = self.maxx - self.minx
+        self.dataRangeY = self.maxy - self.miny
+        self.rangeFactorX = self.UIRange / self.dataRangeX
+        self.rangeFactorY = self.UIRange / self.dataRangeY
+
+        # normalize
+        self.offsetX = -1 * self.minx
+        self.offsetY = -1 * self.miny
+
+    def getCoords(self, X,Y):
+        vx = (X + self.offsetX) * self.rangeFactorX
+        vy = (Y + self.offsetY) * self.rangeFactorY
+        return (vx, vy)
+
+class Timing:
+    # when starting timing,
+    def __init__(self, raceStartDT):
+        self.startTime = datetime.now()
+        self.dateOffset = self.startTime - raceStartDT
+
+    def isReady(self, curTelemetryDT):
+        if self.getRaceDTNow() > curTelemetryDT:
+            return True
+        else: return False
+
+    # get our current point in time in the race
+    def getRaceDTNow(self):
+        return datetime.now() - self.dateOffset
+
+def getCoordsBetweenPoints(posData, i, timing, latest_telemetry, mapper):
+    print("running inside thread...")
+    # TODO remove
+    time.sleep(3)
+    UIEvents.put("Done!")
+    # # TODO extract computation logic to separate function
+    # # keep all references to UI logic
+    # next_data_point_telemetry = posData.Date[i + 1]
+    # telemetry_delta = next_data_point_telemetry - latest_telemetry
+    # virtual_race_DT_now = timing.getRaceDTNow()
+    # t_delta_from_latest = virtual_race_DT_now - latest_telemetry
+    # t_ratio_to_next = t_delta_from_latest / telemetry_delta
+    # # TODO verify we still need this
+    # # if t_ratio_to_next > 1: break
+    # # print("t_ratio_to_next: ", t_ratio_to_next)
+    # X = posData.X[i]
+    # Y = posData.Y[i]
+    # # find vector of track movement till next telemetry pos point
+    # vX = posData.X[i + 1] - X
+    # vY = posData.Y[i + 1] - Y
+    # # we only want a fraction of the vector
+    # X_point = (vX * t_ratio_to_next) + X
+    # Y_point = (vY * t_ratio_to_next) + Y
+    # # map and apply vector to current point and draw it
+    # result_pos = mapper.getCoords(X_point.item(), Y_point.item())
+    # TODO pass result to main
+
+
+UIEvents = queue.Queue()
 
 
 def main():
-    print("starting main")
+    # SETUP
     ver_pos_data = saveFiles.load_object("ver_pos_data.pkl")
-
-    # normalize dates
-    # ver_pos_data.Date = data.map(lambda x: x ** 2)
-
+    mapper = PosMapper(ver_pos_data)
     pygame.init()
     screen = pygame.display.set_mode((500, 500))
-    pygame.display.set_caption("Paint Example")
-
-    minx = min(ver_pos_data.X)
-    maxx = max(ver_pos_data.X)
-    miny = min(ver_pos_data.Y)
-    maxy = max(ver_pos_data.Y)
-
-    UIRange = 500
-
-    dataRangeX = maxx - minx
-    dataRangeY = maxy - miny
-    rangeFactorX = UIRange / dataRangeX
-    rangeFactorY = UIRange / dataRangeY
-
-    # normalize (if neg)
-    offsetX = -1 * minx
-    offsetY = -1 * miny
-
+    pygame.display.set_caption("Live Timing")
+    background = pygame.Surface(screen.get_size())
+    drawing_layer = pygame.Surface(screen.get_size(), pygame.SRCALPHA)  # supports transparency
+    timing = Timing(ver_pos_data.Date[0])
+    t = None
 
     running = True
-    drawing = False
 
-    i = 0
+    # TRACK MAP SETUP
+    # for i in range(ver_pos_data.__len__()):
+    #     pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
+    #     # pos = mapper.getCoords(ver_pos_data.loc[i].X.item(), ver_pos_data.loc[i].Y.item())
+    #     print(i, ". drawing", pos)
+    #     pygame.draw.circle(background, (100, 50, 100, 0.5), pos, 3)
+    #     i = i + 1
+    screen.blit(background, (0, 0))
 
+    # UI/GAME LOOP
+    i=0
     while running:
+        # built in pygame event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                drawing = True
-            elif event.type == pygame.MOUSEBUTTONUP:
-                drawing = False
 
-        if drawing and i < ver_pos_data.__len__():
-            if datetime.now() > ver_pos_data.Date[i]:
-                # pos = pygame.mouse.get_pos()
-                vx = (ver_pos_data.X[i].item() + offsetX) * rangeFactorX
-                vy = (ver_pos_data.Y[i].item() + offsetY) * rangeFactorY
+        # UI event handling
+        try:
+            event = UIEvents.get_nowait()
+            print("event:", event)
+            #  # TODO get result from queue
+            #  # TODO update UI here
+            # now = datetime.now()
+            # print("drawing in between data points ", now.second, now.microsecond, pos)
+            # screen.blit(background, (0, 0))
+            # drawing_layer.fill((0, 0, 0, .5))
+            # pygame.draw.circle(drawing_layer, (150, 0, 100), pos, 1)
+        except:
+            pass
 
-                pos = (vx,vy)
+        if i < (ver_pos_data.__len__()):
+            latest_telemetry = ver_pos_data.Date[i]
+            # draw actual xy data point of track from telemetry
+            if timing.isReady(latest_telemetry):
+                screen.blit(background, (0, 0))
+                drawing_layer.fill((0, 0, 0, .5))
+                pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
                 print("drawing", pos)
-                pygame.draw.circle(screen, (100, 0, 100), pos, 3)
-                pygame.display.update()
+                pygame.draw.circle(drawing_layer, (100, 0, 100), pos, 1)
                 i = i + 1
-
+            # draw points in between
+            else:
+                # fill in area between points (if thread available)
+                if (t is None or not t.is_alive()):
+                    # TODO create/start thread
+                    print("creating thread")
+                    t = threading.Thread(
+                        target=getCoordsBetweenPoints,
+                        args=(ver_pos_data, i, timing, latest_telemetry, mapper)
+                    )
+                    print("starting thread")
+                    t.start()
+        screen.blit(drawing_layer, (0, 0))
         pygame.display.flip()
-
     pygame.quit()
 
 
