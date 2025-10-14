@@ -8,7 +8,8 @@ from threading import Thread
 import pygame
 import saveFiles
 import queue
-
+screenSize = 500
+padding = 25
 
 class PosMapper:
 
@@ -18,7 +19,7 @@ class PosMapper:
         self.miny = min(pos_data.Y)
         self.maxy = max(pos_data.Y)
 
-        self.UIRange = 500
+        self.UIRange = screenSize - padding * 2
 
         self.dataRangeX = self.maxx - self.minx
         self.dataRangeY = self.maxy - self.miny
@@ -30,8 +31,8 @@ class PosMapper:
         self.offsetY = -1 * self.miny
 
     def getCoords(self, X,Y):
-        vx = (X + self.offsetX) * self.rangeFactorX
-        vy = (Y + self.offsetY) * self.rangeFactorY
+        vx = (X + self.offsetX) * self.rangeFactorX + padding
+        vy = (Y + self.offsetY) * self.rangeFactorY + padding
         return (vx, vy)
 
 class Timing:
@@ -50,32 +51,26 @@ class Timing:
         return datetime.now() - self.dateOffset
 
 def getCoordsBetweenPoints(posData, i, timing, latest_telemetry, mapper):
-    print("running inside thread...")
-    # TODO remove
-    time.sleep(3)
-    UIEvents.put("Done!")
-    # # TODO extract computation logic to separate function
-    # # keep all references to UI logic
-    # next_data_point_telemetry = posData.Date[i + 1]
-    # telemetry_delta = next_data_point_telemetry - latest_telemetry
-    # virtual_race_DT_now = timing.getRaceDTNow()
-    # t_delta_from_latest = virtual_race_DT_now - latest_telemetry
-    # t_ratio_to_next = t_delta_from_latest / telemetry_delta
-    # # TODO verify we still need this
-    # # if t_ratio_to_next > 1: break
-    # # print("t_ratio_to_next: ", t_ratio_to_next)
-    # X = posData.X[i]
-    # Y = posData.Y[i]
-    # # find vector of track movement till next telemetry pos point
-    # vX = posData.X[i + 1] - X
-    # vY = posData.Y[i + 1] - Y
-    # # we only want a fraction of the vector
-    # X_point = (vX * t_ratio_to_next) + X
-    # Y_point = (vY * t_ratio_to_next) + Y
-    # # map and apply vector to current point and draw it
-    # result_pos = mapper.getCoords(X_point.item(), Y_point.item())
-    # TODO pass result to main
-
+    # keep all references to UI logic
+    next_data_point_telemetry = posData.Date[i + 1]
+    telemetry_delta = next_data_point_telemetry - latest_telemetry
+    virtual_race_DT_now = timing.getRaceDTNow()
+    t_delta_from_latest = virtual_race_DT_now - latest_telemetry
+    t_ratio_to_next = t_delta_from_latest / telemetry_delta
+    # print("t_ratio_to_next: ", t_ratio_to_next)
+    X = posData.X[i]
+    Y = posData.Y[i]
+    # find vector of track movement till next telemetry pos point
+    vX = posData.X[i + 1] - X
+    vY = posData.Y[i + 1] - Y
+    # we only want a fraction of the vector
+    X_point = (vX * t_ratio_to_next) + X
+    Y_point = (vY * t_ratio_to_next) + Y
+    # map and apply vector to current point and draw it
+    result_pos = mapper.getCoords(X_point.item(), Y_point.item())
+    time.sleep(0.05)
+    print("thread almost finished")
+    UIEvents.put(result_pos)
 
 UIEvents = queue.Queue()
 
@@ -113,15 +108,12 @@ def main():
 
         # UI event handling
         try:
-            event = UIEvents.get_nowait()
-            print("event:", event)
-            #  # TODO get result from queue
-            #  # TODO update UI here
-            # now = datetime.now()
-            # print("drawing in between data points ", now.second, now.microsecond, pos)
-            # screen.blit(background, (0, 0))
+            newPos = UIEvents.get_nowait()
+            now = datetime.now()
+            print("drawing in between data points ", now.second, now.microsecond, newPos)
+            screen.blit(background, (0, 0))
             # drawing_layer.fill((0, 0, 0, .5))
-            # pygame.draw.circle(drawing_layer, (150, 0, 100), pos, 1)
+            pygame.draw.circle(drawing_layer, (150, 0, 100), newPos, 1)
         except:
             pass
 
@@ -130,16 +122,15 @@ def main():
             # draw actual xy data point of track from telemetry
             if timing.isReady(latest_telemetry):
                 screen.blit(background, (0, 0))
-                drawing_layer.fill((0, 0, 0, .5))
+                # drawing_layer.fill((0, 0, 0, .5))
                 pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
                 print("drawing", pos)
-                pygame.draw.circle(drawing_layer, (100, 0, 100), pos, 1)
+                pygame.draw.circle(drawing_layer, (250, 0, 100), pos, 2)
                 i = i + 1
             # draw points in between
             else:
                 # fill in area between points (if thread available)
                 if (t is None or not t.is_alive()):
-                    # TODO create/start thread
                     print("creating thread")
                     t = threading.Thread(
                         target=getCoordsBetweenPoints,
