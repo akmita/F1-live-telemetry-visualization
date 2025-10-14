@@ -4,12 +4,15 @@ import time
 from queue import Queue
 from xmlrpc.client import DateTime
 from threading import Thread
-
 import pygame
 import saveFiles
 import queue
+
+
 screenSize = 500
 padding = 25
+UIEvents = queue.Queue()
+
 
 class PosMapper:
 
@@ -72,9 +75,6 @@ def getCoordsBetweenPoints(posData, i, timing, latest_telemetry, mapper):
     print("thread almost finished")
     UIEvents.put(result_pos)
 
-UIEvents = queue.Queue()
-
-
 def main():
     # SETUP
     ver_pos_data = saveFiles.load_object("ver_pos_data.pkl")
@@ -90,12 +90,12 @@ def main():
     running = True
 
     # TRACK MAP SETUP
-    # for i in range(ver_pos_data.__len__()):
-    #     pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
-    #     # pos = mapper.getCoords(ver_pos_data.loc[i].X.item(), ver_pos_data.loc[i].Y.item())
-    #     print(i, ". drawing", pos)
-    #     pygame.draw.circle(background, (100, 50, 100, 0.5), pos, 3)
-    #     i = i + 1
+    for i in range(ver_pos_data.__len__()):
+        pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
+        # pos = mapper.getCoords(ver_pos_data.loc[i].X.item(), ver_pos_data.loc[i].Y.item())
+        print(i, ". drawing", pos)
+        pygame.draw.circle(background, (50, 50, 50, 0.5), pos, 6)
+        i = i + 1
     screen.blit(background, (0, 0))
 
     # UI/GAME LOOP
@@ -112,7 +112,7 @@ def main():
             now = datetime.now()
             print("drawing in between data points ", now.second, now.microsecond, newPos)
             screen.blit(background, (0, 0))
-            # drawing_layer.fill((0, 0, 0, .5))
+            drawing_layer.fill((0, 0, 0, .5))
             pygame.draw.circle(drawing_layer, (150, 0, 100), newPos, 1)
         except:
             pass
@@ -122,21 +122,19 @@ def main():
             # draw actual xy data point of track from telemetry
             if timing.isReady(latest_telemetry):
                 screen.blit(background, (0, 0))
-                # drawing_layer.fill((0, 0, 0, .5))
+                drawing_layer.fill((0, 0, 0, .5))
                 pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
                 print("drawing", pos)
-                pygame.draw.circle(drawing_layer, (250, 0, 100), pos, 2)
+                pygame.draw.circle(drawing_layer, (20, 200, 20), pos, 1)
                 i = i + 1
             # draw points in between
             else:
                 # fill in area between points (if thread available)
                 if (t is None or not t.is_alive()):
-                    print("creating thread")
                     t = threading.Thread(
                         target=getCoordsBetweenPoints,
                         args=(ver_pos_data, i, timing, latest_telemetry, mapper)
                     )
-                    print("starting thread")
                     t.start()
         screen.blit(drawing_layer, (0, 0))
         pygame.display.flip()
