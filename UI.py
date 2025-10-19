@@ -12,10 +12,9 @@ import queue
 screenSize = 500
 padding = 25
 UIEvents = queue.Queue()
-
+refreshRate = 0.01
 
 class PosMapper:
-
     def __init__(self, pos_data):
         self.minx = min(pos_data.X)
         self.maxx = max(pos_data.X)
@@ -71,28 +70,26 @@ def getCoordsBetweenPoints(posData, i, timing, latest_telemetry, mapper):
     Y_point = (vY * t_ratio_to_next) + Y
     # map and apply vector to current point and draw it
     result_pos = mapper.getCoords(X_point.item(), Y_point.item())
-    time.sleep(0.05)
-    print("thread almost finished")
+    time.sleep(refreshRate)
     UIEvents.put(result_pos)
 
 def main():
     # SETUP
-    ver_pos_data = saveFiles.load_object("ver_pos_data.pkl")
+    ver_pos_data = saveFiles.load_object("ver_pos_data.pkl") # TODO get different drivers telemetry
     mapper = PosMapper(ver_pos_data)
     pygame.init()
-    screen = pygame.display.set_mode((500, 500))
+    screen = pygame.display.set_mode((screenSize, screenSize))
     pygame.display.set_caption("Live Timing")
     background = pygame.Surface(screen.get_size())
     drawing_layer = pygame.Surface(screen.get_size(), pygame.SRCALPHA)  # supports transparency
     timing = Timing(ver_pos_data.Date[0])
-    t = None
+    t = None # thread
 
     running = True
 
     # TRACK MAP SETUP
     for i in range(ver_pos_data.__len__()):
         pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
-        # pos = mapper.getCoords(ver_pos_data.loc[i].X.item(), ver_pos_data.loc[i].Y.item())
         print(i, ". drawing", pos)
         pygame.draw.circle(background, (50, 50, 50, 0.5), pos, 6)
         i = i + 1
@@ -113,6 +110,7 @@ def main():
             print("drawing in between data points ", now.second, now.microsecond, newPos)
             screen.blit(background, (0, 0))
             drawing_layer.fill((0, 0, 0, .5))
+            # TODO diff color depending on driver
             pygame.draw.circle(drawing_layer, (150, 0, 100), newPos, 1)
         except:
             pass
@@ -121,11 +119,11 @@ def main():
             latest_telemetry = ver_pos_data.Date[i]
             # draw actual xy data point of track from telemetry
             if timing.isReady(latest_telemetry):
-                screen.blit(background, (0, 0))
-                drawing_layer.fill((0, 0, 0, .5))
-                pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
-                print("drawing", pos)
-                pygame.draw.circle(drawing_layer, (20, 200, 20), pos, 1)
+                # screen.blit(background, (0, 0))
+                # drawing_layer.fill((0, 0, 0, .5))
+                # pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
+                # print("drawing", pos)
+                # pygame.draw.circle(drawing_layer, (20, 200, 20), pos, 1)
                 i = i + 1
             # draw points in between
             else:
