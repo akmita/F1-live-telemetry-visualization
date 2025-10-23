@@ -15,6 +15,7 @@ screenSize = 500
 padding = 25
 UIEvents = queue.Queue()
 refreshRate = 0.05
+streamRate = 0.15
 
 
 
@@ -25,32 +26,23 @@ class TelemetryController:
         self.alo_pos_data = saveFiles.load_object("alo_pos_data.pkl")
         self.mapper = PosMapper(self.ver_pos_data)
         self.timing = Timing(self.ver_pos_data.Date[0])
-        self.thread_ver = DriverThread(self.timing, self.mapper)
-        # TODO move to driver object
-        self.t = threading.Thread(
-            target=self.thread_ver.Start,
-            args=()
-        )
-
+        self.driver_thread = DriverThread(self.timing, self.mapper)
         self.thread = threading.Thread(
-            target=self.Start,
+            target=self.Run,
             args=()
         )
 
     def StartTelemetryStream(self):
-        self.thread = threading.Thread(
-            target=self.Start,
-            args=()
-        )
         self.thread.start()
 
     def StartDriverThreads(self):
-        self.t.start() # TODO move to driver object
+         self.driver_thread.StartThread()
 
-    def Start(self):
+    def Run(self):
+        log_info("starting telemetry stream thread")
         for i in range(self.ver_pos_data.__len__()):
-            time.sleep(0.05)
-            self.thread_ver.event_queue.put(PosData(self.ver_pos_data, i))
+            time.sleep(streamRate)
+            self.driver_thread.event_queue.put(PosData(self.ver_pos_data, i))
 
 
 class PosData:
@@ -105,8 +97,15 @@ class DriverThread:
         self.mapper = mapper
         self.timing = timing
         self.lock = threading.Semaphore(1)
+        self.t = threading.Thread(
+            target=self.Run,
+            args=()
+        )
 
-    def Start(self):
+    def StartThread(self):
+        self.t.start()
+
+    def Run(self):
         log_info("starting DriverThread")
         while True:
             # CASE 1: not enough telemetry points
