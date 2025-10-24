@@ -8,6 +8,7 @@ import pygame
 import saveFiles
 import queue
 from logger import log_info, log_debug
+from enum import Enum
 
 
 
@@ -17,13 +18,16 @@ UIEvents = queue.Queue()
 refreshRate = 0.05
 streamRate = 0.15
 
-
+class ScreenLayer(Enum):
+    TRACK_MAP = 1
+    DRIVERS = 2
 
 # will send telemetry to driver threads
 class TelemetryController:
     def __init__(self):
         self.ver_pos_data = saveFiles.load_object("ver_pos_data.pkl")
         self.alo_pos_data = saveFiles.load_object("alo_pos_data.pkl")
+        self.single_lap = saveFiles.load_object("single_lap.pkl")
         self.mapper = PosMapper(self.ver_pos_data)
         self.timing = Timing(self.ver_pos_data.Date[0])
         self.driver_thread = DriverThread(self.timing, self.mapper)
@@ -31,6 +35,13 @@ class TelemetryController:
             target=self.Run,
             args=()
         )
+
+    def InitTrackMap(self):
+        for i in range(self.single_lap.__len__()):
+            pos = self.mapper.getCoords(self.single_lap.X[i].item(), self.single_lap.Y[i].item())
+            # log_info(i, ". drawing", pos)
+            UIEvents.put(UIDrawCommand(pos, (50, 50, 50, 0.5), 6, ScreenLayer.TRACK_MAP))
+            i = i + 1
 
     def StartTelemetryStream(self):
         self.thread.start()
@@ -88,6 +99,13 @@ class Timing:
     # get our current point in time in the race
     def getRaceDTNow(self):
         return datetime.now() - self.dateOffset
+
+class UIDrawCommand:
+    def __init__(self, posData, color, width, screenLayer):
+        self.posData = posData
+        self.color = color
+        self.width = width
+        self.screenLayer = screenLayer
 
 # will contain all data for driver, going to be fed telemetry in a similar to real time basis
 class DriverThread:
@@ -152,7 +170,7 @@ class DriverThread:
             # map and apply vector to current point and draw it
             result_pos = self.mapper.getCoords(X_point.item(), Y_point.item())
             time.sleep(refreshRate)
-            UIEvents.put(result_pos)
+            UIEvents.put(UIDrawCommand(result_pos, (150, 0, 100), 3, ScreenLayer.DRIVERS))
 
 
 def main():
@@ -165,18 +183,12 @@ def main():
     # SETUP
     controller = TelemetryController()
     controller.StartDriverThreads()
+    controller.InitTrackMap()
     controller.StartTelemetryStream()
 
     running = True
 
-    # TODO fix this
-    # # TRACK MAP SETUP
-    # for i in range(ver_pos_data.__len__()):
-    #     pos = mapper.getCoords(ver_pos_data.X[i].item(), ver_pos_data.Y[i].item())
-    #     # log_info(i, ". drawing", pos)
-    #     pygame.draw.circle(background, (50, 50, 50, 0.5), pos, 6)
-    #     i = i + 1
-    # screen.blit(background, (0, 0))
+    screen.blit(background, (0, 0))
     log_info("starting game loop")
     # UI/GAME LOOP
     i=0
@@ -189,12 +201,19 @@ def main():
 
         # UI event handling
         try:
-            newPos = UIEvents.get_nowait()
+            command: UIDrawCommand = UIEvents.get_nowait()
             now = datetime.now()
-            log_info("drawing in between data points ", now.second, now.microsecond, newPos)
             screen.blit(background, (0, 0))
             drawing_layer.fill((0, 0, 0, .5))
-            pygame.draw.circle(drawing_layer, (150, 0, 100), newPos, 1)
+            log_info("processing command")
+            if command.screenLayer == ScreenLayer.DRIVERS:
+                log_info("drawing in between data points ", command.posData)
+                pygame.draw.circle(drawing_layer, command.color, command.posData, command.width)
+            elif command.screenLayer == ScreenLayer.TRACK_MAP:
+                log_info("drawing track map data point ", command.posData)
+                pygame.draw.circle(background, command.color, command.posData, command.width)
+            else:
+                log_info("invalid screen requested in command", command.posData, command.color, command.screenLayer)
         except:
             pass
 
