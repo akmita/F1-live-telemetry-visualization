@@ -14,7 +14,6 @@ from enum import Enum
 
 screenSize = 500
 padding = 25
-UIEvents = queue.Queue()
 refreshRate = 0.05
 streamRate = 0.15
 
@@ -23,11 +22,11 @@ class Mediator:
         self.Queue = queue.Queue()
 
     def publish(self, event):
-        self.event_queue.put(event)
+        self.Queue.put(event)
 
     def get_event(self):
         try:
-            return self.event_queue.get_nowait()
+            return self.Queue.get_nowait()
         except queue.Empty:
             return None
 
@@ -53,8 +52,7 @@ class TelemetryController:
     def InitTrackMap(self):
         for i in range(self.single_lap.__len__()):
             pos = self.mapper.getCoords(self.single_lap.X[i].item(), self.single_lap.Y[i].item())
-            # log_info(i, ". drawing", pos)
-            UIEvents.put(UIDrawCommand(pos, (50, 50, 50, 0.5), 6, ScreenLayer.TRACK_MAP))
+            self.mediator.publish(UIDrawCommand(pos, (50, 50, 50, 0.5), 6, ScreenLayer.TRACK_MAP))
             i = i + 1
 
     def StartTelemetryStream(self):
@@ -185,7 +183,7 @@ class DriverThread:
             # map and apply vector to current point and draw it
             result_pos = self.mapper.getCoords(X_point.item(), Y_point.item())
             time.sleep(refreshRate)
-            UIEvents.put(UIDrawCommand(result_pos, (150, 0, 100), 3, ScreenLayer.DRIVERS))
+            self.mediator.publish(UIDrawCommand(result_pos, (150, 0, 100), 3, ScreenLayer.DRIVERS))
 
 
 def main():
@@ -217,22 +215,21 @@ def main():
                 running = False
 
         # UI event handling
-        try:
-            command: UIDrawCommand = UIEvents.get_nowait()
-            now = datetime.now()
-            screen.blit(background, (0, 0))
-            drawing_layer.fill((0, 0, 0, .5))
-            log_info("processing command")
-            if command.screenLayer == ScreenLayer.DRIVERS:
-                log_info("drawing in between data points ", command.posData)
-                pygame.draw.circle(drawing_layer, command.color, command.posData, command.width)
-            elif command.screenLayer == ScreenLayer.TRACK_MAP:
-                log_info("drawing track map data point ", command.posData)
-                pygame.draw.circle(background, command.color, command.posData, command.width)
-            else:
-                log_info("invalid screen requested in command", command.posData, command.color, command.screenLayer)
-        except:
-            pass
+        command = pos_mediator.get_event()
+        if command is None:
+            continue
+        now = datetime.now()
+        screen.blit(background, (0, 0))
+        drawing_layer.fill((0, 0, 0, .5))
+        log_info("processing command")
+        if command.screenLayer == ScreenLayer.DRIVERS:
+            log_info("drawing in between data points ", command.posData)
+            pygame.draw.circle(drawing_layer, command.color, command.posData, command.width)
+        elif command.screenLayer == ScreenLayer.TRACK_MAP:
+            log_info("drawing track map data point ", command.posData)
+            pygame.draw.circle(background, command.color, command.posData, command.width)
+        else:
+            log_info("invalid screen requested in command", command.posData, command.color, command.screenLayer)
 
         screen.blit(drawing_layer, (0, 0))
         pygame.display.flip()
