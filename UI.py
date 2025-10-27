@@ -185,56 +185,70 @@ class DriverThread:
             time.sleep(refreshRate)
             self.mediator.publish(UIDrawCommand(result_pos, (150, 0, 100), 3, ScreenLayer.DRIVERS))
 
+# runs on main thread, controls UI
+class UIController:
+    def __init__(self, mediator):
+        # SETUP UI
+        pygame.init()
+        self.screen = pygame.display.set_mode((screenSize, screenSize))
+        pygame.display.set_caption("Live Timing")
+        # UI layers
+        self.background = pygame.Surface(self.screen.get_size())
+        self.drawing_layer = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)  # supports transparency
+        self.running = False
+        self.mediator = mediator
 
+    def Start(self):
+        self.running = True
+        self.Run()
+
+    def Run(self):
+        log_info("starting game loop")
+        self.screen.blit(self.background, (0, 0))
+        i = 0
+        while self.running:
+            self.screen.blit(self.background, (0, 0))
+            # built in pygame event handling
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+            # UI event handling
+            command = self.mediator.get_event()
+            if command is None:
+                continue
+            now = datetime.now()
+            self.screen.blit(self.background, (0, 0))
+            self.drawing_layer.fill((0, 0, 0, .5))
+            log_info("processing command")
+            if command.screenLayer == ScreenLayer.DRIVERS:
+                log_info("drawing in between data points ", command.posData)
+                pygame.draw.circle(self.drawing_layer, command.color, command.posData, command.width)
+            elif command.screenLayer == ScreenLayer.TRACK_MAP:
+                log_info("drawing track map data point ", command.posData)
+                pygame.draw.circle(self.background, command.color, command.posData, command.width)
+            else:
+                log_info("invalid screen requested in command", command.posData, command.color, command.screenLayer)
+
+            self.screen.blit(self.drawing_layer, (0, 0))
+            pygame.display.flip()
+
+        log_info("ending game loop")
+        pygame.quit()
+
+
+# -----------
+# ENTRY POINT
+# -----------
 def main():
-    # SETUP UI
-    pygame.init()
-    screen = pygame.display.set_mode((screenSize, screenSize))
-    pygame.display.set_caption("Live Timing")
-    background = pygame.Surface(screen.get_size())
-    drawing_layer = pygame.Surface(screen.get_size(), pygame.SRCALPHA)  # supports transparency
     # SETUP
     pos_mediator = Mediator()
     controller = TelemetryController(pos_mediator)
     controller.StartDriverThreads()
     controller.InitTrackMap()
     controller.StartTelemetryStream()
-
-
-    running = True
-
-    screen.blit(background, (0, 0))
-    log_info("starting game loop")
-    # UI/GAME LOOP
-    i=0
-    while running:
-        screen.blit(background, (0, 0))
-        # built in pygame event handling
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
-        # UI event handling
-        command = pos_mediator.get_event()
-        if command is None:
-            continue
-        now = datetime.now()
-        screen.blit(background, (0, 0))
-        drawing_layer.fill((0, 0, 0, .5))
-        log_info("processing command")
-        if command.screenLayer == ScreenLayer.DRIVERS:
-            log_info("drawing in between data points ", command.posData)
-            pygame.draw.circle(drawing_layer, command.color, command.posData, command.width)
-        elif command.screenLayer == ScreenLayer.TRACK_MAP:
-            log_info("drawing track map data point ", command.posData)
-            pygame.draw.circle(background, command.color, command.posData, command.width)
-        else:
-            log_info("invalid screen requested in command", command.posData, command.color, command.screenLayer)
-
-        screen.blit(drawing_layer, (0, 0))
-        pygame.display.flip()
-    pygame.quit()
-
+    UI = UIController(pos_mediator)
+    UI.Start()
 
 if __name__ == "__main__":
     main()
