@@ -18,19 +18,33 @@ UIEvents = queue.Queue()
 refreshRate = 0.05
 streamRate = 0.15
 
+class Mediator:
+    def __init__(self):
+        self.Queue = queue.Queue()
+
+    def publish(self, event):
+        self.event_queue.put(event)
+
+    def get_event(self):
+        try:
+            return self.event_queue.get_nowait()
+        except queue.Empty:
+            return None
+
 class ScreenLayer(Enum):
     TRACK_MAP = 1
     DRIVERS = 2
 
 # will send telemetry to driver threads
 class TelemetryController:
-    def __init__(self):
+    def __init__(self, mediator):
         self.ver_pos_data = saveFiles.load_object("ver_pos_data.pkl")
         self.alo_pos_data = saveFiles.load_object("alo_pos_data.pkl")
         self.single_lap = saveFiles.load_object("single_lap.pkl")
         self.mapper = PosMapper(self.ver_pos_data)
         self.timing = Timing(self.ver_pos_data.Date[0])
-        self.driver_thread = DriverThread(self.timing, self.mapper)
+        self.mediator = mediator
+        self.driver_thread = DriverThread(self.timing, self.mapper, self.mediator)
         self.thread = threading.Thread(
             target=self.Run,
             args=()
@@ -109,12 +123,13 @@ class UIDrawCommand:
 
 # will contain all data for driver, going to be fed telemetry in a similar to real time basis
 class DriverThread:
-    def __init__(self, timing, mapper):
+    def __init__(self, timing, mapper, mediator):
         log_info("creating driver thread")
-        self.event_queue = queue.Queue() # contains Date,X,Y
+        self.event_queue = queue.Queue()
         self.mapper = mapper
         self.timing = timing
         self.lock = threading.Semaphore(1)
+        self.mediator = mediator
         self.t = threading.Thread(
             target=self.Run,
             args=()
@@ -181,10 +196,12 @@ def main():
     background = pygame.Surface(screen.get_size())
     drawing_layer = pygame.Surface(screen.get_size(), pygame.SRCALPHA)  # supports transparency
     # SETUP
-    controller = TelemetryController()
+    pos_mediator = Mediator()
+    controller = TelemetryController(pos_mediator)
     controller.StartDriverThreads()
     controller.InitTrackMap()
     controller.StartTelemetryStream()
+
 
     running = True
 
