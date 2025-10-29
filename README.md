@@ -20,6 +20,7 @@ auto mark and track drivers who are managing tires
 .. any ones that are off pace, which ones are faster
 distance from each driver visualization like a connect drivers to
 .. dots on the right in a line representing relative distance
+distance from 
 
 --------------
 UNIT TEST PLANS
@@ -30,9 +31,14 @@ fill driverThread with telemetry verify telemetry is in order
 --------------
 REFACTOR TODO
 --------------
-decouple driverThread-UIeventQueue with mediator pattern
-main should be a class, called UIController 
-decouple posMapper from TelemetryController 
+decouple driverThread-UIeventQueue with mediator pattern - [X]
+main should be a class, called UIController - [X]
+decouple posMapper from TelemetryController - 
+are we violating the dependency inversion principle with 
+ TelemetryController depending on driverThreads
+ also violating single responsibility
+ 
+
 
 --------------------------
 freewriting/problems/ideas

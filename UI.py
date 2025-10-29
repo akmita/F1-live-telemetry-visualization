@@ -16,6 +16,7 @@ screenSize = 500
 padding = 25
 refreshRate = 0.05
 streamRate = 0.15
+driverPosDataFiles = ["ver_pos_data.pkl", "alo_pos_data.pkl"]
 
 class Mediator:
     def __init__(self):
@@ -37,17 +38,24 @@ class ScreenLayer(Enum):
 # will send telemetry to driver threads
 class TelemetryController:
     def __init__(self, mediator):
-        self.ver_pos_data = saveFiles.load_object("ver_pos_data.pkl")
-        self.alo_pos_data = saveFiles.load_object("alo_pos_data.pkl")
+        self.drivers_data = []
+        self.driver_threads : list [DriverThread] = []
+        # DRIVERS - step 1 read pos data
+        for d_file in driverPosDataFiles:
+            self.drivers_data.append(saveFiles.load_object(d_file))
         self.single_lap = saveFiles.load_object("single_lap.pkl")
-        self.mapper = PosMapper(self.ver_pos_data)
-        self.timing = Timing(self.ver_pos_data.Date[0])
+        # initialize mapper and timing with first driver's data
+        self.mapper = PosMapper(self.drivers_data[0])
+        self.timing = Timing(self.drivers_data[0].Date[0])
         self.mediator = mediator
-        self.driver_thread = DriverThread(self.timing, self.mapper, self.mediator)
+        # telemetry streamer thread
         self.thread = threading.Thread(
             target=self.Run,
             args=()
         )
+        # DRIVERS - step 2 - create driver threads
+        for d in range(len(self.drivers_data)):
+            self.driver_threads.append(DriverThread(self.timing, self.mapper, self.mediator))
 
     def InitTrackMap(self):
         for i in range(self.single_lap.__len__()):
@@ -59,15 +67,21 @@ class TelemetryController:
         self.thread.start()
 
     def StartDriverThreads(self):
-         self.driver_thread.StartThread()
+        # DRIVERS - step 3 - run driver threads
+        for t in self.driver_threads:
+            t.StartThread()
 
     def Run(self):
+        # DRIVERS - step 4 - send telemetry data to each thread
         log_info("starting telemetry stream thread")
-        for i in range(self.ver_pos_data.__len__()):
-            time.sleep(streamRate)
-            self.driver_thread.event_queue.put(PosData(self.ver_pos_data, i))
+        for k in range(self.driver_threads.__len__()):
+            for i in range(9999999): # TODO better way of doing this
+                time.sleep(streamRate)
+                log_info("sending data to driver", k, " index: ", i)
+                self.driver_threads[k].event_queue.put(PosData(self.drivers_data[k], i))
+                # TODO ignore if reach end of any drivers posData
 
-
+# gets element at x,y,timestamp of posData from fastf1 api object
 class PosData:
     def __init__(self, posData, i):
         self.X = posData.X[i]
@@ -118,6 +132,12 @@ class UIDrawCommand:
         self.color = color
         self.width = width
         self.screenLayer = screenLayer
+
+class DriverWrapper:
+    def __init__(self, driver_name, driver_thread, driver_data):
+        self.driver_name = driver_name
+        self.driver_thread : DriverThread = driver_thread
+        self.driver_data = driver_data
 
 # will contain all data for driver, going to be fed telemetry in a similar to real time basis
 class DriverThread:
@@ -248,6 +268,7 @@ def main():
     controller.InitTrackMap()
     controller.StartTelemetryStream()
     UI = UIController(pos_mediator)
+    # UI will block and take over the main thread from here
     UI.Start()
 
 if __name__ == "__main__":
