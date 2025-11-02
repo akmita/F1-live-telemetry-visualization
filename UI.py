@@ -17,6 +17,7 @@ padding = 25
 refreshRate = 0.05
 streamRate = 0.15
 
+
 class Mediator:
     def __init__(self):
         self.Queue = queue.Queue()
@@ -31,8 +32,10 @@ class Mediator:
             return None
 
 class ScreenLayer(Enum):
-    TRACK_MAP = 1
-    DRIVERS = 2
+    TRACK_MAP = "TRACK_MAP"
+    class drivers(Enum):
+        VER = "VER"
+        ALO = "ALO"
 
 class Driver:
     def __init__(self, driver_name, driver_thread, driver_data):
@@ -61,8 +64,9 @@ class Drivers:
     def LoadDriversData(self):
         pos_data = saveFiles.load_object("ver_pos_data.pkl")
         self.timing = Timing(pos_data.Date[0])
-        self.drivers["VER"] = Driver("VER", DriverThread(self.timing, self.mapper, self.mediator), pos_data)
-        self.drivers["ALO"] = Driver("ALO", DriverThread(self.timing, self.mapper, self.mediator), saveFiles.load_object("alo_pos_data.pkl"))
+        # TODO fix this is terrible
+        self.drivers["VER"] = Driver("VER", DriverThread(self.timing, self.mapper, self.mediator, ScreenLayer.drivers.VER), pos_data)
+        self.drivers["ALO"] = Driver("ALO", DriverThread(self.timing, self.mapper, self.mediator, ScreenLayer.drivers.ALO), saveFiles.load_object("alo_pos_data.pkl"))
 
     def StartDriverThreads(self):
         self.drivers['VER'].StartThread()
@@ -160,7 +164,7 @@ class UIDrawCommand:
 
 # will contain all data for driver, going to be fed telemetry in a similar to real time basis
 class DriverThread:
-    def __init__(self, timing, mapper, mediator):
+    def __init__(self, timing, mapper, mediator, driver_name):
         log_info("creating driver thread")
         self.event_queue = queue.Queue()
         self.mapper = mapper
@@ -171,6 +175,7 @@ class DriverThread:
             target=self.Run,
             args=()
         )
+        self.driver_name = driver_name
 
     def StartThread(self):
         self.t.start()
@@ -222,7 +227,7 @@ class DriverThread:
             # map and apply vector to current point and draw it
             result_pos = self.mapper.getCoords(X_point.item(), Y_point.item())
             time.sleep(refreshRate)
-            self.mediator.publish(UIDrawCommand(result_pos, (150, 0, 100), 3, ScreenLayer.DRIVERS))
+            self.mediator.publish(UIDrawCommand(result_pos, (150, 0, 100), 3, self.driver_name))
 
 # runs on main thread, controls UI
 class UIController:
@@ -233,7 +238,8 @@ class UIController:
         pygame.display.set_caption("Live Timing")
         # UI layers
         self.background = pygame.Surface(self.screen.get_size())
-        self.drawing_layer = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)  # supports transparency
+        self.layer_1 = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)  # supports transparency
+        self.layer_2 = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)  # supports transparency
         self.running = False
         self.mediator = mediator
 
@@ -253,27 +259,33 @@ class UIController:
                     running = False
 
             # UI event handling
-            command = self.mediator.get_event()
+            command : UIDrawCommand = self.mediator.get_event()
             if command is None:
                 continue
             now = datetime.now()
             self.screen.blit(self.background, (0, 0))
-            self.drawing_layer.fill((0, 0, 0, .5))
-            log_info("processing command")
-            if command.screenLayer == ScreenLayer.DRIVERS:
+
+            if command.screenLayer == ScreenLayer.drivers.VER:
+                self.layer_1.fill((0, 0, 0, .5))
                 log_info("drawing in between data points ", command.posData)
-                pygame.draw.circle(self.drawing_layer, command.color, command.posData, command.width)
+                pygame.draw.circle(self.layer_1, command.color, command.posData, command.width)
+            elif command.screenLayer == ScreenLayer.drivers.ALO:
+                self.layer_2.fill((0, 0, 0, .5))
+                log_info("drawing in between data points ", command.posData)
+                pygame.draw.circle(self.layer_2, command.color, command.posData, command.width)
             elif command.screenLayer == ScreenLayer.TRACK_MAP:
                 log_info("drawing track map data point ", command.posData)
                 pygame.draw.circle(self.background, command.color, command.posData, command.width)
             else:
                 log_info("invalid screen requested in command", command.posData, command.color, command.screenLayer)
 
-            self.screen.blit(self.drawing_layer, (0, 0))
+            self.screen.blit(self.layer_1, (0, 0))
+            self.screen.blit(self.layer_2, (0, 0))
             pygame.display.flip()
 
         log_info("ending game loop")
         pygame.quit()
+
 
 
 # -----------
