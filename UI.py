@@ -93,10 +93,9 @@ class TelemetryController:
         self.drivers_container.LoadDriversData()
 
     def InitTrackMap(self):
-        for i in range(self.single_lap.__len__()):
-            pos = self.mapper.getCoords(self.single_lap.X[i].item(), self.single_lap.Y[i].item())
+        for x, y in zip(self.single_lap.X, self.single_lap.Y):
+            pos = self.mapper.getCoords(x, y)
             self.mediator.publish(UIDrawCommand(pos, (50, 50, 50, 0.5), 6, ScreenLayer.TRACK_MAP))
-            i = i + 1
 
     def StartTelemetryStream(self):
         self.thread.start()
@@ -262,7 +261,7 @@ class UIController:
             command : UIDrawCommand = self.mediator.get_event()
             if command is None:
                 continue
-            now = datetime.now()
+
             self.screen.blit(self.background, (0, 0))
 
             if command.screenLayer == ScreenLayer.drivers.VER:
